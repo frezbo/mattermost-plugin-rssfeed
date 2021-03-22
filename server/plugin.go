@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -164,8 +166,17 @@ func (p *RSSFeedPlugin) processRSSV2Subscription(subscription *Subscription) err
 			post = post + item.Title + "\n"
 		}
 
+		// some feeds only return relative url
+		// if so generate full url
+		feedLink := strings.TrimSpace(item.Link)
+		if !strings.HasPrefix(feedLink, "http") {
+			feedLink, err = generateFullLink(subscription.URL, feedLink)
+			if err != nil {
+				return err
+			}
+		}
 		if config.ShowRSSLink {
-			post = post + strings.TrimSpace(item.Link) + "\n"
+			post = post + feedLink + "\n"
 		}
 		if config.ShowDescription {
 			post = post + html2md.Convert(item.Description) + "\n"
@@ -180,6 +191,15 @@ func (p *RSSFeedPlugin) processRSSV2Subscription(subscription *Subscription) err
 	}
 
 	return nil
+}
+
+func generateFullLink(subscriptionURL, relativeURL string) (string, error) {
+	uri, err := url.Parse(subscriptionURL)
+	if err != nil {
+		return "", err
+	}
+	uri.Path = path.Join(uri.Host, relativeURL)
+	return fmt.Sprintf("%s://%s", uri.Scheme, uri.Path), nil
 }
 
 func (p *RSSFeedPlugin) processAtomSubscription(subscription *Subscription) error {
