@@ -11,7 +11,12 @@ import (
 type Subscription struct {
 	ChannelID string
 	URL       string
-	XML       string
+	XMLInfo   *XMLFeedMeta
+}
+
+// XMLFeedMeta stores part of the feed xml data
+type XMLFeedMeta struct {
+	ID, Title, GUID, PubDate string `json:",omitempty"`
 }
 
 const SUBSCRIPTIONS_KEY = "subscriptions"
@@ -26,7 +31,7 @@ func (p *RSSFeedPlugin) subscribe(ctx context.Context, channelID string, url str
 	sub := &Subscription{
 		ChannelID: channelID,
 		URL:       url,
-		XML:       "",
+		XMLInfo:   &XMLFeedMeta{},
 	}
 
 	key := getKey(channelID, url)
@@ -48,7 +53,7 @@ func (p *RSSFeedPlugin) addSubscription(key string, sub *Subscription) error {
 	// check if url already exists
 	_, ok := currentSubscriptions.Subscriptions[key]
 	if !ok {
-		currentSubscriptions.Subscriptions[key] = &Subscription{ChannelID: sub.ChannelID, URL: sub.URL}
+		currentSubscriptions.Subscriptions[key] = sub
 		err = p.storeSubscriptions(currentSubscriptions)
 		if err != nil {
 			p.API.LogError(err.Error())

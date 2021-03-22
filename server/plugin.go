@@ -132,24 +132,15 @@ func (p *RSSFeedPlugin) processRSSV2Subscription(subscription *Subscription) err
 	config := p.getConfiguration()
 
 	// get new rss feed string from url
-	newRssFeed, newRssFeedString, err := rssv2parser.ParseURL(subscription.URL)
+	newRssFeed, _, err := rssv2parser.ParseURL(subscription.URL)
 	if err != nil {
 		return err
 	}
 
 	// retrieve old xml feed from database
-	oldRssFeed, err := rssv2parser.ParseString(subscription.XML)
-	if err != nil {
-		return err
-	}
+	oldRssFeed := subscription.XMLInfo
 
-	items := rssv2parser.CompareItemsBetweenOldAndNew(oldRssFeed, newRssFeed)
-
-	// if this is a new subscription only post the latest
-	// and not spam the channel
-	if len(oldRssFeed.Channel.ItemList) == 0 {
-		items = items[:1]
-	}
+	items := compareRSSv2(oldRssFeed, newRssFeed)
 
 	for _, item := range items {
 		post := ""
@@ -186,11 +177,48 @@ func (p *RSSFeedPlugin) processRSSV2Subscription(subscription *Subscription) err
 	}
 
 	if len(items) > 0 {
-		subscription.XML = newRssFeedString
+		xmlFeedMeta := &XMLFeedMeta{}
+		latestItem := items[0]
+		if latestItem.GUID != "" {
+			xmlFeedMeta.GUID = latestItem.GUID
+		}
+		xmlFeedMeta.Title = latestItem.Title
+		xmlFeedMeta.PubDate = latestItem.PubDate
+		subscription.XMLInfo = xmlFeedMeta
 		p.updateSubscription(subscription)
 	}
 
 	return nil
+}
+
+func compareRSSv2(oldRSS *XMLFeedMeta, newRSS *rssv2parser.RSSV2) []rssv2parser.Item {
+	itemList := []rssv2parser.Item{}
+
+	// if this is a new subscription only post the latest
+	// and not spam the channel
+	if oldRSS == nil {
+		// handle RSS feeds that do not have any posts
+		if len(newRSS.Channel.ItemList) == 0 {
+			return itemList
+		}
+		itemList = newRSS.Channel.ItemList[:1]
+		return itemList
+	}
+
+	for _, item := range newRSS.Channel.ItemList {
+		exists := false
+		if len(item.GUID) > 0 && item.GUID == oldRSS.GUID {
+			exists = true
+			break
+		} else if item.PubDate == oldRSS.PubDate && item.Title == oldRSS.Title {
+			exists = true
+			break
+		}
+		if !exists {
+			itemList = append(itemList, item)
+		}
+	}
+	return itemList
 }
 
 func generateFullLink(subscriptionURL, relativeURL string) (string, error) {
@@ -206,24 +234,15 @@ func (p *RSSFeedPlugin) processAtomSubscription(subscription *Subscription) erro
 	config := p.getConfiguration()
 
 	// get new rss feed string from url
-	newFeed, newFeedString, err := atomparser.ParseURL(subscription.URL)
+	newFeed, _, err := atomparser.ParseURL(subscription.URL)
 	if err != nil {
 		return err
 	}
 
 	// retrieve old xml feed from database
-	oldFeed, err := atomparser.ParseString(subscription.XML)
-	if err != nil {
-		return err
-	}
+	oldFeed := subscription.XMLInfo
 
-	items := atomparser.CompareItemsBetweenOldAndNew(oldFeed, newFeed)
-
-	// if this is a new subscription only post the latest
-	// and not spam the channel
-	if len(oldFeed.Entry) == 0 {
-		items = items[:1]
-	}
+	items := compareAtom(oldFeed, newFeed)
 
 	for _, item := range items {
 		post := ""
@@ -268,11 +287,41 @@ func (p *RSSFeedPlugin) processAtomSubscription(subscription *Subscription) erro
 	}
 
 	if len(items) > 0 {
-		subscription.XML = newFeedString
+		latestItem := items[0]
+		subscription.XMLInfo = &XMLFeedMeta{
+			ID: latestItem.ID,
+		}
 		p.updateSubscription(subscription)
 	}
 
 	return nil
+}
+
+func compareAtom(feedOld *XMLFeedMeta, feedNew *atom.Feed) []*atom.Entry {
+	itemList := []*atom.Entry{}
+
+	// if this is a new subscription only post the latest
+	// and not spam the channel
+	if feedOld == nil {
+		// handle RSS feeds that do not have any posts
+		if len(feedNew.Entry) == 0 {
+			return itemList
+		}
+		itemList = feedNew.Entry[:1]
+		return itemList
+	}
+
+	for _, item1 := range feedNew.Entry {
+		exists := false
+		if item1.ID == feedOld.ID {
+			exists = true
+			break
+		}
+		if !exists {
+			itemList = append(itemList, item1)
+		}
+	}
+	return itemList
 }
 
 func tryParseRichNode(node *atom.Text, post *string) bool {

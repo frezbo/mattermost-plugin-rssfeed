@@ -8,6 +8,7 @@ GO_BUILD_FLAGS ?=
 MM_UTILITIES_DIR ?= ../mattermost-utilities
 
 export GO111MODULE=on
+export CGO_ENABLED=0
 
 # You can include assets this directory into the bundle. This can be e.g. used to include profile pictures.
 ASSETS_DIR ?= assets
