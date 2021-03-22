@@ -242,9 +242,7 @@ func (p *RSSFeedPlugin) processAtomSubscription(subscription *Subscription) erro
 
 		if config.ShowAtomLink {
 			for _, link := range item.Link {
-				if link.Rel == "alternate" {
-					post = post + strings.TrimSpace(link.Href) + "\n"
-				}
+				post = post + strings.TrimSpace(link.Href) + "\n"
 			}
 		}
 
